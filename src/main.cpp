@@ -1,6 +1,7 @@
 #include <raylib.h>
 #include<iostream>
 #include<deque>
+#include <cmath>
 
 using namespace std;
 
@@ -11,6 +12,23 @@ int cellSize = 30;
 int cellCount = 30;
 int offset = 75;
 double lastUpdateTime = 0;
+
+// Global texture for background image
+Texture2D backgroundTexture;
+
+// Game states and difficulty levels
+enum class GameState {
+    MENU,
+    PLAYING,
+    GAME_OVER
+};
+
+enum class DifficultyLevel {
+    BEGINNER,
+    MEDIUM,
+    ADVANCED
+};
+
 bool Elementindeque(Vector2 element, deque<Vector2> &deque) {
     for (const auto& elem : deque) {
         if (elem.x == element.x && elem.y == element.y) {
@@ -19,6 +37,7 @@ bool Elementindeque(Vector2 element, deque<Vector2> &deque) {
     }
     return false;
 }
+
 bool eventHappened(double interval) {
     double currentTime = GetTime();
     if (currentTime - lastUpdateTime >= interval) {
@@ -27,118 +46,469 @@ bool eventHappened(double interval) {
     }
     return false;
 }
-class Game {
-    public:
-        Snake snake = Snake();
-        Food food = Food(snake.body);
-        bool running = true;
-        int score = 0;
-        void draw() {
-            snake.Draw();
-            food.Draw();
-        }
 
-        void Update() {
-            if (running) {
-                snake.update();
-                CheckCollision();
-                CollisionEdge();
-                collwithTail();
-            }
+// Difficulty manager to handle game speeds
+class DifficultyManager {
+public:
+    static double getSpeed(DifficultyLevel level) {
+        switch (level) {
+            case DifficultyLevel::BEGINNER:
+                return 0.3;  // Slower speed
+            case DifficultyLevel::MEDIUM:
+                return 0.2;  // Medium speed
+            case DifficultyLevel::ADVANCED:
+                return 0.1;  // Faster speed
+            default:
+                return 0.2;
         }
-        void CheckCollision() {
-            // Check if the snake's head collides with the food
-            if (snake.body[0].x == food.position.x && snake.body[0].y == food.position.y) {
-                 // Grow the snake
-                food.position = food.GetRandomPos(snake.body);
-                snake.addSegment = true; // Set the flag to add a new segment
-                score++;
-            }
+    }
+    
+    static const char* getDifficultyText(DifficultyLevel level) {
+        switch (level) {
+            case DifficultyLevel::BEGINNER:
+                return "BEGINNER";
+            case DifficultyLevel::MEDIUM:
+                return "MEDIUM";
+            case DifficultyLevel::ADVANCED:
+                return "ADVANCED";
+            default:
+                return "UNKNOWN";
         }
-        void CollisionEdge(){
-            if (snake.body[0].x == -1 || snake.body[0].x == cellCount || 
-                snake.body[0].y == -1 || snake.body[0].y >= cellCount) {
-                GameOver(); // Reset direction to right
-            }
-        }
-        void GameOver(){
-            snake.Reset();
-            food.position = food.GetRandomPos(snake.body);
-            running = false;
-            score = 0;
-        }
-        void collwithTail(){
-            deque<Vector2> headlessBody = snake.body;
-            headlessBody.pop_front();
-            if (Elementindeque(snake.body[0], headlessBody)) {
-                GameOver();
-            }
-        }
+    }
 };
-class Snake{
 
-    public:
-        deque<Vector2> body={Vector2{6,9}, Vector2{5,9}, Vector2{4,9}};
-        Vector2 direction = {1, 0}; // Initial direction to the right
-        bool addSegment = false;
+// Base GameObject class
+class GameObject {
+public:
+    virtual ~GameObject() = default;
+    virtual void Draw() = 0;  // Pure virtual function
+    virtual void Update() = 0; // Pure virtual function
+};
 
-        void Draw() {
-            for (unsigned int i=0; i<body.size(); i++) {
-                float x = body[i].x ;
-                float y = body[i].y ;
-                Rectangle segment=Rectangle{offset+x* cellSize, offset+y* cellSize, (float)cellSize, (float)cellSize};
-                DrawRectangleRounded(segment,0.5,6,darkgreen);
-            }
+// Snake class inheriting from GameObject
+class Snake : public GameObject {
+public:
+    deque<Vector2> body = {Vector2{6,9}, Vector2{5,9}, Vector2{4,9}};
+    Vector2 direction = {1, 0}; // Initial direction to the right
+    bool addSegment = false;
+    bool running = true;
+    int score = 0;
+
+    void Draw() override {
+        for (unsigned int i = 0; i < body.size(); i++) {
+            float x = body[i].x;
+            float y = body[i].y;
+            Rectangle segment = Rectangle{offset + x * cellSize, offset + y * cellSize, (float)cellSize, (float)cellSize};
+            DrawRectangleRounded(segment, 0.5, 6, darkgreen);
         }
-        void update(){
+    }
+
+    void Update() override {
+        if (running) {
             body.push_front(Vector2{body[0].x + direction.x, body[0].y + direction.y});
-            if (addSegment==true) {
-                 // Add a new segment at the end
+            if (addSegment == true) {
                 addSegment = false; // Reset the flag
-            }else{
+            } else {
                 body.pop_back();
-                
             }
-
-            
         }
-        void Reset() {
-            body={Vector2{6,9}, Vector2{5,9}, Vector2{4,9}};
-            
-            direction = {1, 0}; // Reset direction to right
-            // Reset the flag
-        }
+    }
 
+    void Reset() {
+        body = {Vector2{6,9}, Vector2{5,9}, Vector2{4,9}};
+        direction = {1, 0}; // Reset direction to right
+        running = true;
+        score = 0;
+    }
+
+    void CheckEdgeCollision() {
+        if (body[0].x == -1 || body[0].x == cellCount || 
+            body[0].y == -1 || body[0].y >= cellCount) {
+            running = false; // Just stop the game, don't reset score
+        }
+    }
+
+    void CheckTailCollision() {
+        deque<Vector2> headlessBody = body;
+        headlessBody.pop_front();
+        if (Elementindeque(body[0], headlessBody)) {
+            running = false; // Just stop the game, don't reset score
+        }
+    }
+
+    void GameOver() {
+        running = false; // Only stop the game, keep the score
+    }
+
+    void Grow() {
+        addSegment = true;
+        score++;
+    }
 };
-class Food{
-    public:
-        Vector2 position;
 
-        Food(deque<Vector2> snakeBody) {
-            position = GetRandomPos(snakeBody);
-        }
-        ~Food() {}
-        
-        
-        void Draw() {
-            DrawRectangle(offset+position.x*cellSize, offset+position.y*cellSize, cellSize, cellSize, RED);
-        }
-        Vector2 GetRandomCell() {
-            float x = GetRandomValue(0, cellCount - 1);
-            float y = GetRandomValue(0, cellCount - 1);
-            return Vector2 {x, y};
-        }
-        Vector2 GetRandomPos(deque<Vector2> snakeBody) {
+// Food class inheriting from GameObject
+class Food : public GameObject {
+public:
+    Vector2 position;
 
-            Vector2 position = GetRandomCell();
-            while (Elementindeque(position, snakeBody)) {
-                position = GetRandomCell();
-                
-            }
-            return position;
+    Food(deque<Vector2> snakeBody) {
+        position = GetRandomPos(snakeBody);
+    }
+    ~Food() {}
+
+    void Draw() override {
+        DrawRectangle(offset + position.x * cellSize, offset + position.y * cellSize, cellSize, cellSize, RED);
+    }
+
+    void Update() override {
+        // Food doesn't need to update every frame, but we implement it for consistency
+    }
+
+    Vector2 GetRandomCell() {
+        float x = GetRandomValue(0, cellCount - 1);
+        float y = GetRandomValue(0, cellCount - 1);
+        return Vector2{x, y};
+    }
+
+    Vector2 GetRandomPos(deque<Vector2> snakeBody) {
+        Vector2 position = GetRandomCell();
+        while (Elementindeque(position, snakeBody)) {
+            position = GetRandomCell();
+        }
+        return position;
+    }
+
+    void Respawn(deque<Vector2> snakeBody) {
+        position = GetRandomPos(snakeBody);
+    }
+};
+
+// Game Manager class to handle states and menu
+class GameManager {
+private:
+    GameState currentState;
+    DifficultyLevel selectedDifficulty;
+    double gameSpeed;
+    Snake snake;
+    Food food;
+    int finalScore; // Store the final score when game ends
+    int highScore;  // Store the highest score achieved
+    
+public:
+    GameManager() : currentState(GameState::MENU), selectedDifficulty(DifficultyLevel::MEDIUM), 
+                   gameSpeed(DifficultyManager::getSpeed(selectedDifficulty)), food(snake.body), 
+                   finalScore(0), highScore(0) {
+    }
+
+    void Update() {
+        switch (currentState) {
+            case GameState::MENU:
+                UpdateMenu();
+                break;
+            case GameState::PLAYING:
+                UpdateGame();
+                break;
+            case GameState::GAME_OVER:
+                UpdateGameOver();
+                break;
+        }
+    }
+
+    void Draw() {
+        switch (currentState) {
+            case GameState::MENU:
+                DrawMenu();
+                break;
+            case GameState::PLAYING:
+                DrawGame();
+                break;
+            case GameState::GAME_OVER:
+                DrawGameOver();
+                break;
+        }
+    }
+
+private:
+    void UpdateMenu() {
+        Vector2 mousePoint = GetMousePosition();
+        
+        // Define button rectangles
+        Rectangle beginnerBtn = { GetScreenWidth()/2.0f - 100, GetScreenHeight()/2.0f - 80, 200, 50 };
+        Rectangle mediumBtn = { GetScreenWidth()/2.0f - 100, GetScreenHeight()/2.0f - 20, 200, 50 };
+        Rectangle advancedBtn = { GetScreenWidth()/2.0f - 100, GetScreenHeight()/2.0f + 40, 200, 50 };
+
+        // Check button clicks
+        if (CheckCollisionPointRec(mousePoint, beginnerBtn) && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+            StartGame(DifficultyLevel::BEGINNER);
+        }
+        else if (CheckCollisionPointRec(mousePoint, mediumBtn) && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+            StartGame(DifficultyLevel::MEDIUM);
+        }
+        else if (CheckCollisionPointRec(mousePoint, advancedBtn) && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+            StartGame(DifficultyLevel::ADVANCED);
+        }
+    }
+
+    void UpdateGame() {
+        if (eventHappened(gameSpeed)) {
+            snake.Update();
+        }
+
+        // Handle input
+        if (IsKeyPressed(KEY_RIGHT) && snake.direction.x != -1) {
+            snake.direction = {1, 0};
+            snake.running = true;
+        } else if (IsKeyPressed(KEY_LEFT) && snake.direction.x != 1) {
+            snake.direction = {-1, 0};
+            snake.running = true;
+        } else if (IsKeyPressed(KEY_UP) && snake.direction.y != 1) {
+            snake.direction = {0, -1};
+            snake.running = true;
+        } else if (IsKeyPressed(KEY_DOWN) && snake.direction.y != -1) {
+            snake.direction = {0, 1};
+            snake.running = true;
+        }
+
+        // Check collision between snake and food
+        if (snake.body[0].x == food.position.x && snake.body[0].y == food.position.y) {
+            snake.Grow();
+            food.Respawn(snake.body);
+        }
+
+        // Check collisions
+        snake.CheckEdgeCollision();
+        snake.CheckTailCollision();
+
+        // Check if game is over
+        if (!snake.running) {
+            finalScore = snake.score; // Save the final score before transitioning
             
+            // Update high score if current score is higher
+            if (finalScore > highScore) {
+                highScore = finalScore;
+            }
+            
+            currentState = GameState::GAME_OVER;
         }
 
+        // Allow returning to menu with ESC
+        if (IsKeyPressed(KEY_ESCAPE)) {
+            currentState = GameState::MENU;
+        }
+    }
+
+    void UpdateGameOver() {
+        // Press SPACE to restart or ESC to return to menu
+        if (IsKeyPressed(KEY_SPACE)) {
+            RestartGame();
+        }
+        else if (IsKeyPressed(KEY_ESCAPE)) {
+            currentState = GameState::MENU;
+        }
+    }
+
+    void DrawMenu() {
+        ClearBackground(GREEN);
+        
+        // Draw background image if loaded
+        if (backgroundTexture.id > 0) {
+            // Scale the image to fit the screen while maintaining aspect ratio
+            float screenWidth = GetScreenWidth();
+            float screenHeight = GetScreenHeight();
+            float imageWidth = backgroundTexture.width;
+            float imageHeight = backgroundTexture.height;
+            
+            // Calculate scaling factor to cover the entire screen
+            float scaleX = screenWidth / imageWidth;
+            float scaleY = screenHeight / imageHeight;
+            float scale = fmax(scaleX, scaleY); // Use the larger scale to cover screen
+            
+            // Calculate position to center the image
+            float scaledWidth = imageWidth * scale;
+            float scaledHeight = imageHeight * scale;
+            float posX = (screenWidth - scaledWidth) / 2;
+            float posY = (screenHeight - scaledHeight) / 2;
+            
+            // Draw the background image
+            DrawTextureEx(backgroundTexture, Vector2{posX, posY}, 0.0f, scale, WHITE);
+            
+            // Add a semi-transparent overlay to make text more readable
+            DrawRectangle(0, 0, screenWidth, screenHeight, ColorAlpha(BLACK, 0.3f));
+        }
+        
+        // Draw title with outline for better visibility
+        const char* title = "SNAKE GAME";
+        int titleWidth = MeasureText(title, 60);
+        int titleX = GetScreenWidth()/2 - titleWidth/2;
+        int titleY = GetScreenHeight()/4;
+        
+        // Draw title outline
+        DrawText(title, titleX-2, titleY-2, 60, BLACK);
+        DrawText(title, titleX+2, titleY-2, 60, BLACK);
+        DrawText(title, titleX-2, titleY+2, 60, BLACK);
+        DrawText(title, titleX+2, titleY+2, 60, BLACK);
+        // Draw title
+        DrawText(title, titleX, titleY, 60, WHITE);
+
+        // Draw subtitle with outline
+        const char* subtitle = "Select Difficulty Level";
+        int subtitleWidth = MeasureText(subtitle, 30);
+        int subtitleX = GetScreenWidth()/2 - subtitleWidth/2;
+        int subtitleY = GetScreenHeight()/3;
+        
+        // Draw subtitle outline
+        DrawText(subtitle, subtitleX-1, subtitleY-1, 30, BLACK);
+        DrawText(subtitle, subtitleX+1, subtitleY-1, 30, BLACK);
+        DrawText(subtitle, subtitleX-1, subtitleY+1, 30, BLACK);
+        DrawText(subtitle, subtitleX+1, subtitleY+1, 30, BLACK);
+        // Draw subtitle
+        DrawText(subtitle, subtitleX, subtitleY, 30, WHITE);
+
+        Vector2 mousePoint = GetMousePosition();
+        
+        // Define and draw buttons
+        Rectangle beginnerBtn = { GetScreenWidth()/2.0f - 100, GetScreenHeight()/2.0f - 80, 200, 50 };
+        Rectangle mediumBtn = { GetScreenWidth()/2.0f - 100, GetScreenHeight()/2.0f - 20, 200, 50 };
+        Rectangle advancedBtn = { GetScreenWidth()/2.0f - 100, GetScreenHeight()/2.0f + 40, 200, 50 };
+
+        // Draw buttons with enhanced visibility
+        DrawButton(beginnerBtn, "BEGINNER (Slow)", mousePoint, GREEN);
+        DrawButton(mediumBtn, "MEDIUM (Normal)", mousePoint, ORANGE);
+        DrawButton(advancedBtn, "ADVANCED (Fast)", mousePoint, RED);
+
+        // Draw instructions with outline
+        const char* instruction = "Click on a difficulty level to start";
+        int instrWidth = MeasureText(instruction, 20);
+        int instrX = GetScreenWidth()/2 - instrWidth/2;
+        int instrY = GetScreenHeight() - 100;
+        
+        // Draw instruction outline
+        DrawText(instruction, instrX-1, instrY-1, 20, BLACK);
+        DrawText(instruction, instrX+1, instrY-1, 20, BLACK);
+        DrawText(instruction, instrX-1, instrY+1, 20, BLACK);
+        DrawText(instruction, instrX+1, instrY+1, 20, BLACK);
+        // Draw instruction
+        DrawText(instruction, instrX, instrY, 20, WHITE);
+        
+        // Draw high score with outline
+        const char* highScoreText = TextFormat("High Score: %d", highScore);
+        int highScoreWidth = MeasureText(highScoreText, 25);
+        int highScoreX = GetScreenWidth()/2 - highScoreWidth/2;
+        int highScoreY = GetScreenHeight() - 60;
+        
+        Color highScoreColor = highScore > 0 ? YELLOW : WHITE;
+        
+        // Draw high score outline
+        DrawText(highScoreText, highScoreX-1, highScoreY-1, 25, BLACK);
+        DrawText(highScoreText, highScoreX+1, highScoreY-1, 25, BLACK);
+        DrawText(highScoreText, highScoreX-1, highScoreY+1, 25, BLACK);
+        DrawText(highScoreText, highScoreX+1, highScoreY+1, 25, BLACK);
+        // Draw high score
+        DrawText(highScoreText, highScoreX, highScoreY, 25, highScoreColor);
+    }
+
+    void DrawGame() {
+        ClearBackground(green);
+        
+        // Draw game border
+        DrawRectangleLinesEx(Rectangle{(float)offset-5, (float)offset-5, 
+                                     (float)cellSize*cellCount+10, 
+                                     (float)cellSize*cellCount+10}, 5, darkgreen);
+        
+        // Draw game objects using polymorphism
+        snake.Draw();
+        food.Draw();
+        
+        // Draw UI
+        DrawText(TextFormat("Score: %d", snake.score), offset-5, offset+cellSize*cellCount+15, 30, darkgreen);
+        DrawText(TextFormat("High Score: %d", highScore), offset-5, offset+cellSize*cellCount+50, 20, 
+                 snake.score >= highScore && snake.score > 0 ? RED : GRAY); // Highlight if approaching/beating high score
+        DrawText(TextFormat("Difficulty: %s", DifficultyManager::getDifficultyText(selectedDifficulty)), 
+                offset-5, 20, 20, darkgreen);
+        DrawText("ESC: Menu", offset-5, 50, 16, darkgreen);
+    }
+
+    void DrawGameOver() {
+        ClearBackground(green);
+        
+        // Draw game over text
+        const char* gameOverText = "GAME OVER!";
+        int gameOverWidth = MeasureText(gameOverText, 60);
+        DrawText(gameOverText, GetScreenWidth()/2 - gameOverWidth/2, GetScreenHeight()/3, 60, RED);
+
+        // Check if it's a new high score
+        bool isNewHighScore = (finalScore == highScore && finalScore > 0);
+        
+        // Draw final score
+        const char* scoreText = TextFormat("Final Score: %d", finalScore);
+        int scoreWidth = MeasureText(scoreText, 40);
+        DrawText(scoreText, GetScreenWidth()/2 - scoreWidth/2, GetScreenHeight()/2, 40, darkgreen);
+        
+        // Draw high score
+        const char* highScoreText = TextFormat("High Score: %d", highScore);
+        int highScoreWidth = MeasureText(highScoreText, 30);
+        DrawText(highScoreText, GetScreenWidth()/2 - highScoreWidth/2, GetScreenHeight()/2 + 45, 30, 
+                 isNewHighScore ? RED : darkgreen);
+        
+        // Show "NEW HIGH SCORE!" if it's a new record
+        if (isNewHighScore) {
+            const char* newHighScoreText = "NEW HIGH SCORE!";
+            int newHighScoreWidth = MeasureText(newHighScoreText, 35);
+            DrawText(newHighScoreText, GetScreenWidth()/2 - newHighScoreWidth/2, GetScreenHeight()/2 + 80, 35, RED);
+        }
+
+        // Draw difficulty
+        const char* diffText = TextFormat("Difficulty: %s", DifficultyManager::getDifficultyText(selectedDifficulty));
+        int diffWidth = MeasureText(diffText, 25);
+        DrawText(diffText, GetScreenWidth()/2 - diffWidth/2, GetScreenHeight()/2 + (isNewHighScore ? 120 : 90), 25, darkgreen);
+
+        // Draw instructions
+        const char* restartText = "SPACE: Play Again    ESC: Main Menu";
+        int restartWidth = MeasureText(restartText, 25);
+        DrawText(restartText, GetScreenWidth()/2 - restartWidth/2, GetScreenHeight() - 100, 25, darkgreen);
+    }
+
+    void DrawButton(Rectangle bounds, const char* text, Vector2 mousePoint, Color baseColor) {
+        bool isHovered = CheckCollisionPointRec(mousePoint, bounds);
+        
+        // Draw button background with enhanced visibility
+        Color buttonColor = isHovered ? ColorAlpha(baseColor, 0.9f) : ColorAlpha(baseColor, 0.7f);
+        DrawRectangleRec(bounds, buttonColor);
+        DrawRectangleLinesEx(bounds, 3, isHovered ? WHITE : BLACK);
+        
+        // Add inner border for better definition
+        DrawRectangleLinesEx(Rectangle{bounds.x+2, bounds.y+2, bounds.width-4, bounds.height-4}, 1, 
+                            isHovered ? ColorAlpha(WHITE, 0.5f) : ColorAlpha(BLACK, 0.3f));
+        
+        // Draw button text with outline for better visibility
+        int textWidth = MeasureText(text, 20);
+        int textX = bounds.x + bounds.width/2 - textWidth/2;
+        int textY = bounds.y + bounds.height/2 - 10;
+        Color textColor = isHovered ? WHITE : BLACK;
+        Color outlineColor = isHovered ? BLACK : WHITE;
+        
+        // Draw text outline
+        DrawText(text, textX-1, textY-1, 20, outlineColor);
+        DrawText(text, textX+1, textY-1, 20, outlineColor);
+        DrawText(text, textX-1, textY+1, 20, outlineColor);
+        DrawText(text, textX+1, textY+1, 20, outlineColor);
+        // Draw text
+        DrawText(text, textX, textY, 20, textColor);
+    }
+
+    void StartGame(DifficultyLevel difficulty) {
+        selectedDifficulty = difficulty;
+        gameSpeed = DifficultyManager::getSpeed(difficulty);
+        snake.Reset();
+        food.Respawn(snake.body);
+        currentState = GameState::PLAYING;
+    }
+
+    void RestartGame() {
+        snake.Reset();
+        food.Respawn(snake.body);
+        currentState = GameState::PLAYING;
+    }
 };
 
 
@@ -146,37 +516,33 @@ class Food{
 
 int main() 
 {
-    cout<<"Starting the game...."<<endl;
-    InitWindow(2*offset+cellCount*cellSize, 2*offset+cellCount*cellSize, "My Game Window");
-    SetTargetFPS(60); // Set the game to run at 60 frames per second
+    cout<<"Starting Snake Game..."<<endl;
+    InitWindow(2*offset+cellCount*cellSize, 2*offset+cellCount*cellSize, "Snake Game - Menu");
+    SetTargetFPS(60);
 
-    Game game = Game();
+    // Load background image
+    // Place your image file in the same directory as your executable
+    // Supported formats: PNG, JPG, GIF, BMP, TGA, etc.
+    backgroundTexture = LoadTexture("c:\\Users\\PWIT\\Desktop\\Raylib-CPP-Starter-Template-for-VSCODE-V2-main\\pic.png"); // Change this to your image file name
+    
+   
 
-    while(WindowShouldClose() == false) 
+    GameManager gameManager;
+
+    while(!WindowShouldClose()) 
     {
-        BeginDrawing();
-        if (eventHappened(0.2)){
-            game.Update();
-        }
-        if (IsKeyPressed(KEY_RIGHT) && game.snake.direction.x != -1) {
-            game.snake.direction = {1, 0};
-            game.running = true; // Move right
-        } else if (IsKeyPressed(KEY_LEFT) && game.snake.direction.x != 1) {
-            game.snake.direction = {-1, 0};
-            game.running = true; // Move left
-        } else if (IsKeyPressed(KEY_UP) && game.snake.direction.y != 1) {
-            game.snake.direction = {0, -1};
-            game.running = true; // Move up
-        } else if (IsKeyPressed(KEY_DOWN) && game.snake.direction.y != -1) {
-            game.snake.direction = {0, 1};
-            game.running = true; // Move down
-        }
-        ClearBackground(green);
-        DrawRectangleLinesEx(Rectangle{(float)offset-5, (float)offset-5, (float)cellSize*cellCount+10, (float)cellSize*cellCount+10},5, darkgreen);
-        DrawText(TextFormat("Score: %d", game.score), offset-5, offset+cellSize*cellCount+10, 40, darkgreen);
-        game.draw();
+        // Update game logic
+        gameManager.Update();
 
+        // Draw everything
+        BeginDrawing();
+        gameManager.Draw();
         EndDrawing();
+    }
+
+    // Unload texture before closing
+    if (backgroundTexture.id > 0) {
+        UnloadTexture(backgroundTexture);
     }
 
     CloseWindow();
