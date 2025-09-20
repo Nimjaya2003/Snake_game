@@ -18,7 +18,8 @@ Texture2D backgroundTexture;
 
 // Game states and difficulty levels
 enum class GameState {
-    MENU,
+    MAIN_MENU,
+    DIFFICULTY_MENU,
     PLAYING,
     GAME_OVER
 };
@@ -195,15 +196,18 @@ private:
     int highScore;  // Store the highest score achieved
     
 public:
-    GameManager() : currentState(GameState::MENU), selectedDifficulty(DifficultyLevel::MEDIUM), 
+    GameManager() : currentState(GameState::MAIN_MENU), selectedDifficulty(DifficultyLevel::MEDIUM), 
                    gameSpeed(DifficultyManager::getSpeed(selectedDifficulty)), food(snake.body), 
                    finalScore(0), highScore(0) {
     }
 
     void Update() {
         switch (currentState) {
-            case GameState::MENU:
-                UpdateMenu();
+            case GameState::MAIN_MENU:
+                UpdateMainMenu();
+                break;
+            case GameState::DIFFICULTY_MENU:
+                UpdateDifficultyMenu();
                 break;
             case GameState::PLAYING:
                 UpdateGame();
@@ -216,8 +220,11 @@ public:
 
     void Draw() {
         switch (currentState) {
-            case GameState::MENU:
-                DrawMenu();
+            case GameState::MAIN_MENU:
+                DrawMainMenu();
+                break;
+            case GameState::DIFFICULTY_MENU:
+                DrawDifficultyMenu();
                 break;
             case GameState::PLAYING:
                 DrawGame();
@@ -229,13 +236,31 @@ public:
     }
 
 private:
-    void UpdateMenu() {
+
+    void UpdateMainMenu() {
+        Vector2 mousePoint = GetMousePosition();
+        
+        // Define button rectangles
+        Rectangle playBtn = { GetScreenWidth()/2.0f - 100, GetScreenHeight()/2.0f - 25, 200, 50 };
+        Rectangle exitBtn = { GetScreenWidth()/2.0f - 100, GetScreenHeight()/2.0f + 50, 200, 50 };
+
+        // Check button clicks
+        if (CheckCollisionPointRec(mousePoint, playBtn) && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+            currentState = GameState::DIFFICULTY_MENU;
+        }
+        else if (CheckCollisionPointRec(mousePoint, exitBtn) && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+            exit(0);
+        }
+    }
+
+    void UpdateDifficultyMenu() {
         Vector2 mousePoint = GetMousePosition();
         
         // Define button rectangles
         Rectangle beginnerBtn = { GetScreenWidth()/2.0f - 100, GetScreenHeight()/2.0f - 80, 200, 50 };
         Rectangle mediumBtn = { GetScreenWidth()/2.0f - 100, GetScreenHeight()/2.0f - 20, 200, 50 };
         Rectangle advancedBtn = { GetScreenWidth()/2.0f - 100, GetScreenHeight()/2.0f + 40, 200, 50 };
+        Rectangle backBtn = { GetScreenWidth()/2.0f - 100, GetScreenHeight()/2.0f + 100, 200, 50 };
 
         // Check button clicks
         if (CheckCollisionPointRec(mousePoint, beginnerBtn) && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
@@ -247,13 +272,27 @@ private:
         else if (CheckCollisionPointRec(mousePoint, advancedBtn) && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
             StartGame(DifficultyLevel::ADVANCED);
         }
+        else if (CheckCollisionPointRec(mousePoint, backBtn) && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+            currentState = GameState::MAIN_MENU;
+        }
+
+        // ESC key to go back to main menu
+        if (IsKeyPressed(KEY_ESCAPE)) {
+            currentState = GameState::MAIN_MENU;
+        }
     }
 
     void UpdateGame() {
         if (eventHappened(gameSpeed)) {
             snake.Update();
+        
+            // Check collision between snake and food
+            if (snake.body[0].x == food.position.x && snake.body[0].y == food.position.y) {
+                snake.Grow();
+                food.Respawn(snake.body);
+            }
         }
-
+        
         // Handle input
         if (IsKeyPressed(KEY_RIGHT) && snake.direction.x != -1) {
             snake.direction = {1, 0};
@@ -269,21 +308,14 @@ private:
             snake.running = true;
         }
 
-        // Check collision between snake and food
-        if (snake.body[0].x == food.position.x && snake.body[0].y == food.position.y) {
-            snake.Grow();
-            food.Respawn(snake.body);
-        }
-
         // Check collisions
         snake.CheckEdgeCollision();
         snake.CheckTailCollision();
 
         // Check if game is over
         if (!snake.running) {
-            finalScore = snake.score; // Save the final score before transitioning
+            finalScore = snake.score;
             
-            // Update high score if current score is higher
             if (finalScore > highScore) {
                 highScore = finalScore;
             }
@@ -293,7 +325,7 @@ private:
 
         // Allow returning to menu with ESC
         if (IsKeyPressed(KEY_ESCAPE)) {
-            currentState = GameState::MENU;
+            currentState = GameState::MAIN_MENU;
         }
     }
 
@@ -303,11 +335,11 @@ private:
             RestartGame();
         }
         else if (IsKeyPressed(KEY_ESCAPE)) {
-            currentState = GameState::MENU;
+            currentState = GameState::MAIN_MENU;
         }
     }
 
-    void DrawMenu() {
+    void DrawMainMenu() {
         ClearBackground(GREEN);
         
         // Draw background image if loaded
@@ -350,54 +382,37 @@ private:
         // Draw title
         DrawText(title, titleX, titleY, 60, WHITE);
 
-        // Draw subtitle with outline
-        const char* subtitle = "Select Difficulty Level";
-        int subtitleWidth = MeasureText(subtitle, 30);
+        // Draw subtitle
+        const char* subtitle = "Welcome to Snake Adventure!";
+        int subtitleWidth = MeasureText(subtitle, 25);
         int subtitleX = GetScreenWidth()/2 - subtitleWidth/2;
         int subtitleY = GetScreenHeight()/3;
         
         // Draw subtitle outline
-        DrawText(subtitle, subtitleX-1, subtitleY-1, 30, BLACK);
-        DrawText(subtitle, subtitleX+1, subtitleY-1, 30, BLACK);
-        DrawText(subtitle, subtitleX-1, subtitleY+1, 30, BLACK);
-        DrawText(subtitle, subtitleX+1, subtitleY+1, 30, BLACK);
+        DrawText(subtitle, subtitleX-1, subtitleY-1, 25, BLACK);
+        DrawText(subtitle, subtitleX+1, subtitleY-1, 25, BLACK);
+        DrawText(subtitle, subtitleX-1, subtitleY+1, 25, BLACK);
+        DrawText(subtitle, subtitleX+1, subtitleY+1, 25, BLACK);
         // Draw subtitle
-        DrawText(subtitle, subtitleX, subtitleY, 30, WHITE);
+        DrawText(subtitle, subtitleX, subtitleY, 25, WHITE);
 
         Vector2 mousePoint = GetMousePosition();
         
         // Define and draw buttons
-        Rectangle beginnerBtn = { GetScreenWidth()/2.0f - 100, GetScreenHeight()/2.0f - 80, 200, 50 };
-        Rectangle mediumBtn = { GetScreenWidth()/2.0f - 100, GetScreenHeight()/2.0f - 20, 200, 50 };
-        Rectangle advancedBtn = { GetScreenWidth()/2.0f - 100, GetScreenHeight()/2.0f + 40, 200, 50 };
+        Rectangle playBtn = { GetScreenWidth()/2.0f - 100, GetScreenHeight()/2.0f - 25, 200, 50 };
+        Rectangle exitBtn = { GetScreenWidth()/2.0f - 100, GetScreenHeight()/2.0f + 50, 200, 50 };
 
-        // Draw buttons with enhanced visibility
-        DrawButton(beginnerBtn, "BEGINNER (Slow)", mousePoint, GREEN);
-        DrawButton(mediumBtn, "MEDIUM (Normal)", mousePoint, ORANGE);
-        DrawButton(advancedBtn, "ADVANCED (Fast)", mousePoint, RED);
-
-        // Draw instructions with outline
-        const char* instruction = "Click on a difficulty level to start";
-        int instrWidth = MeasureText(instruction, 20);
-        int instrX = GetScreenWidth()/2 - instrWidth/2;
-        int instrY = GetScreenHeight() - 100;
+        // Draw buttons
+        DrawButton(playBtn, "PLAY", mousePoint, GREEN);
+        DrawButton(exitBtn, "EXIT", mousePoint, RED);
         
-        // Draw instruction outline
-        DrawText(instruction, instrX-1, instrY-1, 20, BLACK);
-        DrawText(instruction, instrX+1, instrY-1, 20, BLACK);
-        DrawText(instruction, instrX-1, instrY+1, 20, BLACK);
-        DrawText(instruction, instrX+1, instrY+1, 20, BLACK);
-        // Draw instruction
-        DrawText(instruction, instrX, instrY, 20, WHITE);
-        
-        // Draw high score with outline
+        // Draw high score
         const char* highScoreText = TextFormat("High Score: %d", highScore);
         int highScoreWidth = MeasureText(highScoreText, 25);
         int highScoreX = GetScreenWidth()/2 - highScoreWidth/2;
-        int highScoreY = GetScreenHeight() - 60;
+        int highScoreY = GetScreenHeight() - 80;
         
         Color highScoreColor = highScore > 0 ? YELLOW : WHITE;
-        
         // Draw high score outline
         DrawText(highScoreText, highScoreX-1, highScoreY-1, 25, BLACK);
         DrawText(highScoreText, highScoreX+1, highScoreY-1, 25, BLACK);
@@ -405,6 +420,106 @@ private:
         DrawText(highScoreText, highScoreX+1, highScoreY+1, 25, BLACK);
         // Draw high score
         DrawText(highScoreText, highScoreX, highScoreY, 25, highScoreColor);
+
+        // Draw instructions
+        const char* instruction = "Click PLAY to start or use mouse to navigate";
+        int instrWidth = MeasureText(instruction, 18);
+        int instrX = GetScreenWidth()/2 - instrWidth/2;
+        int instrY = GetScreenHeight() - 40;
+        
+        // Draw instruction outline
+        DrawText(instruction, instrX-1, instrY-1, 18, BLACK);
+        DrawText(instruction, instrX+1, instrY-1, 18, BLACK);
+        DrawText(instruction, instrX-1, instrY+1, 18, BLACK);
+        DrawText(instruction, instrX+1, instrY+1, 18, BLACK);
+        // Draw instruction
+        DrawText(instruction, instrX, instrY, 18, WHITE);
+    }
+
+    void DrawDifficultyMenu() {
+        ClearBackground(GREEN);
+        
+        // Draw background image if loaded
+        if (backgroundTexture.id > 0) {
+            // Scale the image to fit the screen while maintaining aspect ratio
+            float screenWidth = GetScreenWidth();
+            float screenHeight = GetScreenHeight();
+            float imageWidth = backgroundTexture.width;
+            float imageHeight = backgroundTexture.height;
+            
+            // Calculate scaling factor to cover the entire screen
+            float scaleX = screenWidth / imageWidth;
+            float scaleY = screenHeight / imageHeight;
+            float scale = fmax(scaleX, scaleY); // Use the larger scale to cover screen
+            
+            // Calculate position to center the image
+            float scaledWidth = imageWidth * scale;
+            float scaledHeight = imageHeight * scale;
+            float posX = (screenWidth - scaledWidth) / 2;
+            float posY = (screenHeight - scaledHeight) / 2;
+            
+            // Draw the background image
+            DrawTextureEx(backgroundTexture, Vector2{posX, posY}, 0.0f, scale, WHITE);
+            
+            // Add a semi-transparent overlay to make text more readable
+            DrawRectangle(0, 0, screenWidth, screenHeight, ColorAlpha(BLACK, 0.3f));
+        }
+        
+        // Draw title
+        const char* title = "SELECT DIFFICULTY";
+        int titleWidth = MeasureText(title, 50);
+        int titleX = GetScreenWidth()/2 - titleWidth/2;
+        int titleY = GetScreenHeight()/4;
+        
+        // Draw title outline
+        DrawText(title, titleX-2, titleY-2, 50, BLACK);
+        DrawText(title, titleX+2, titleY-2, 50, BLACK);
+        DrawText(title, titleX-2, titleY+2, 50, BLACK);
+        DrawText(title, titleX+2, titleY+2, 50, BLACK);
+        // Draw title
+        DrawText(title, titleX, titleY, 50, WHITE);
+
+        // Draw subtitle
+        const char* subtitle = "Choose your challenge level";
+        int subtitleWidth = MeasureText(subtitle, 25);
+        int subtitleX = GetScreenWidth()/2 - subtitleWidth/2;
+        int subtitleY = GetScreenHeight()/3;
+        
+        // Draw subtitle outline
+        DrawText(subtitle, subtitleX-1, subtitleY-1, 25, BLACK);
+        DrawText(subtitle, subtitleX+1, subtitleY-1, 25, BLACK);
+        DrawText(subtitle, subtitleX-1, subtitleY+1, 25, BLACK);
+        DrawText(subtitle, subtitleX+1, subtitleY+1, 25, BLACK);
+        // Draw subtitle
+        DrawText(subtitle, subtitleX, subtitleY, 25, WHITE);
+
+        Vector2 mousePoint = GetMousePosition();
+        
+        // Define and draw difficulty buttons
+        Rectangle beginnerBtn = { GetScreenWidth()/2.0f - 100, GetScreenHeight()/2.0f - 80, 200, 50 };
+        Rectangle mediumBtn = { GetScreenWidth()/2.0f - 100, GetScreenHeight()/2.0f - 20, 200, 50 };
+        Rectangle advancedBtn = { GetScreenWidth()/2.0f - 100, GetScreenHeight()/2.0f + 40, 200, 50 };
+        Rectangle backBtn = { GetScreenWidth()/2.0f - 100, GetScreenHeight()/2.0f + 100, 200, 50 };
+
+        // Draw buttons with enhanced visibility
+        DrawButton(beginnerBtn, "BEGINNER (Slow)", mousePoint, GREEN);
+        DrawButton(mediumBtn, "MEDIUM (Normal)", mousePoint, ORANGE);
+        DrawButton(advancedBtn, "ADVANCED (Fast)", mousePoint, RED);
+        DrawButton(backBtn, "BACK", mousePoint, GRAY);
+
+        // Draw instructions
+        const char* instruction = "Click on a difficulty level to start | ESC: Back";
+        int instrWidth = MeasureText(instruction, 18);
+        int instrX = GetScreenWidth()/2 - instrWidth/2;
+        int instrY = GetScreenHeight() - 60;
+        
+        // Draw instruction outline
+        DrawText(instruction, instrX-1, instrY-1, 18, BLACK);
+        DrawText(instruction, instrX+1, instrY-1, 18, BLACK);
+        DrawText(instruction, instrX-1, instrY+1, 18, BLACK);
+        DrawText(instruction, instrX+1, instrY+1, 18, BLACK);
+        // Draw instruction
+        DrawText(instruction, instrX, instrY, 18, WHITE);
     }
 
     void DrawGame() {
@@ -511,9 +626,6 @@ private:
     }
 };
 
-
-
-
 int main() 
 {
     cout<<"Starting Snake Game..."<<endl;
@@ -521,11 +633,7 @@ int main()
     SetTargetFPS(60);
 
     // Load background image
-    // Place your image file in the same directory as your executable
-    // Supported formats: PNG, JPG, GIF, BMP, TGA, etc.
-    backgroundTexture = LoadTexture("c:\\Users\\PWIT\\Desktop\\Raylib-CPP-Starter-Template-for-VSCODE-V2-main\\pic.png"); // Change this to your image file name
-    
-   
+    backgroundTexture = LoadTexture("c:\\Users\\PWIT\\Desktop\\Raylib-CPP-Starter-Template-for-VSCODE-V2-main\\pic.png");
 
     GameManager gameManager;
 
@@ -540,7 +648,7 @@ int main()
         EndDrawing();
     }
 
-    // Unload texture before closing
+    // Unload texture
     if (backgroundTexture.id > 0) {
         UnloadTexture(backgroundTexture);
     }
